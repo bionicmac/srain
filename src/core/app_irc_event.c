@@ -41,7 +41,9 @@
 #include "meta.h"
 #include "utils.h"
 
-static gboolean irc_period_ping(gpointer user_data);
+static gboolean do_period_ping(gpointer user_data);
+static void add_numeric_error_message(SrnChat *chat, int event, const char
+        *origin, const char **params, int count);
 
 static void irc_event_connect(SircSession *sirc, const char *event);
 static void irc_event_connect_fail(SircSession *sirc, const char *event,
@@ -324,7 +326,7 @@ static void irc_event_welcome(SircSession *sirc, int event,
 
     /* Start peroid ping */
     srv->last_pong = get_time_since_first_call_ms();
-    srv->ping_timer = g_timeout_add(SRN_SERVER_PING_INTERVAL, irc_period_ping, srv);
+    srv->ping_timer = g_timeout_add(SRN_SERVER_PING_INTERVAL, do_period_ping, srv);
     DBG_FR("Ping timer %d created", srv->ping_timer);
 
     // Set your actually nick
@@ -461,6 +463,14 @@ static void irc_event_quit(SircSession *sirc, const char *event,
     }
 
     srn_server_user_set_is_online(srv_user, FALSE);
+
+    // If the quit user is your ghost (own your exact original nick)
+    // and your are using alternate nick (bacause of original nick is in use),
+    // you can change your original nick back.
+    if (g_strcmp0(srv->cfg->user->nick, origin) == 0
+            && srn_user_config_is_alternate_nick(srv->cfg->user, srv->user->nick)) {
+        sirc_cmd_nick(srv->irc, srv->cfg->user->nick);
+    }
 }
 
 static void irc_event_join(SircSession *sirc, const char *event,
@@ -907,7 +917,7 @@ static void irc_event_ctcp_req(SircSession *sirc, const char *event,
         // TODO
     } else if (strcmp(event, "FINGER") == 0) {
         sirc_cmd_ctcp_rsp(srv->irc, origin, event,
-                PACKAGE_NAME " " PACKAGE_VERSION PACKAGE_BUILD);
+                PACKAGE_NAME " " PACKAGE_VERSION "-" PACKAGE_BUILD);
     } else if (strcmp(event, "PING") == 0) {
         sirc_cmd_ctcp_rsp(srv->irc, origin, event, msg);
     } else if (strcmp(event, "SOURCE") == 0) {
@@ -923,7 +933,7 @@ static void irc_event_ctcp_req(SircSession *sirc, const char *event,
         }
     } else if (strcmp(event, "VERSION") == 0) {
         sirc_cmd_ctcp_rsp(srv->irc, origin, event,
-                PACKAGE_NAME " " PACKAGE_VERSION PACKAGE_BUILD);
+                PACKAGE_NAME " " PACKAGE_VERSION "-" PACKAGE_BUILD);
     } else if (strcmp(event, "USERINFO") == 0) {
         sirc_cmd_ctcp_rsp(srv->irc, origin, event, srv->user->realname);
     } else {
@@ -1228,7 +1238,7 @@ static void irc_event_authenticate(SircSession *sirc, const char *event,
 
                 // Get the first parameter
                 if (!count) {
-                    ERR_FR("unexpected authenticate response recieved");
+                    ERR_FR("unexpected authenticate response received");
                     break;
                 }
 
@@ -1374,11 +1384,12 @@ static void irc_event_numeric(SircSession *sirc, int event,
                 g_return_if_fail(count >= 3);
                 nick = params[1];
 
-                /* If you don't have a nickname (unregistered) yet, try a nick
-                 * with a trailing underline('_') */
+                /* If you don't have a nickname (unregistered) yet */
                 if (!srv->registered){
-                    char *new_nick = g_strdup_printf("%s_", nick);
+                    char *new_nick;
 
+                    new_nick = srn_user_config_get_next_alternate_nick(
+                            srv->cfg->user, nick);
                     // FIXME: ircd-seven will truncate the nick without
                     // returning a error message if it reaches the length
                     // limiation, at this time the new_nick is same to the
@@ -1389,7 +1400,8 @@ static void irc_event_numeric(SircSession *sirc, int event,
 
                     g_free(new_nick);
                 }
-                goto ERRMSG;
+                add_numeric_error_message(srv->chat, event, origin, params, count);
+                break;
             }
 
             /************************ NAMES message ************************/
@@ -1748,11 +1760,13 @@ static void irc_event_numeric(SircSession *sirc, int event,
         case SIRC_RFC_ERR_SASLABORTED:
             {
                 sirc_cmd_cap_end(sirc); // End negotiation
-                goto ERRMSG;
+                add_numeric_error_message(srv->chat, event, origin, params, count);
+                break;
             }
         case SIRC_RFC_ERR_SASLALREADY:
             {
-                goto ERRMSG;
+                add_numeric_error_message(srv->chat, event, origin, params, count);
+                break;
             }
             /************************ AWAY message ************************/
         case SIRC_RFC_RPL_AWAY:
@@ -1822,11 +1836,43 @@ static void irc_event_numeric(SircSession *sirc, int event,
                         _("URL of %1$s is: %2$s"), chan, msg);
                 break;
             }
+            /****************** Channel related errors **********************/
+        case SIRC_RFC_ERR_NOSUCHCHANNEL:
+        case SIRC_RFC_ERR_TOOMANYCHANNELS:
+        case SIRC_RFC_ERR_NOTONCHANNEL:
+        case SIRC_RFC_ERR_KEYSET:
+        case SIRC_RFC_ERR_CHANNELISFULL:
+        case SIRC_RFC_ERR_INVITEONLYCHAN:
+        case SIRC_RFC_ERR_BANNEDFROMCHAN:
+        case SIRC_RFC_ERR_BADCHANNELKEY:
+        case SIRC_RFC_ERR_BADCHANMASK:
+        case SIRC_RFC_ERR_NOCHANMODES:
+        case SIRC_RFC_ERR_CHANOPRIVSNEEDED:
+            {
+                const char *chan;
+                const char *msg;
+                SrnChat *chat;
+
+                // <nick> <channel> :<message>
+                g_return_if_fail(count >= 3);
+                chan = params[1];
+                msg = params[2];
+
+                chat = srn_server_get_chat(srv, chan);
+                if (!chat) {
+                    // Fallback to general numeric error if no such channel
+                    add_numeric_error_message(srv->chat, event, origin, params, count);
+                    break;
+                }
+                srn_chat_add_error_message_fmt(chat, _("ERROR[%1$3d] %2$s"), event, msg);
+                break;
+            }
         default:
             {
                 // Error message
                 if (event >= 400 && event < 600){
-                    goto ERRMSG;
+                    add_numeric_error_message(srv->chat, event, origin, params, count);
+                    break;
                 }
 
                 // Unknown message
@@ -1835,49 +1881,25 @@ static void irc_event_numeric(SircSession *sirc, int event,
 
                     buf = g_string_new(NULL);
                     for (int i = 0; i < count; i++){
-                        buf = g_string_append(buf, params[count-1]); // reason
+                        buf = g_string_append(buf, params[i]); // reason
                         if (i != count - 1){
                             buf = g_string_append(buf, ", ");
                         }
                     }
 
-                    WARN_FR("Unspported message, You can report it at " PACKAGE_WEBSITE);
+                    WARN_FR("Unsupported message, You can report it at " PACKAGE_WEBSITE);
                     WARN_FR("server: %s, event: %d, origin: %s, count: %u, params: [%s]",
                             srv->name, event, origin, count, buf->str);
 
                     g_string_free(buf, TRUE);
+
+                    srn_chat_add_recv_message(srv->chat, chat_user, params[count-1]);
                 }
-                return;
-ERRMSG:
-                /* Add error message to UI, usually the params of error message
-                 * is ["<nick>", ... "<reason>"] */
-                {
-                    GString *buf;
-
-                    buf = g_string_new(NULL);
-
-                    for (int i = 1; i < count - 1; i++){ // skip nick
-                        buf = g_string_append(buf, params[i]);
-                        buf = g_string_append_c(buf, ' ');
-                        if (i == count - 2){
-                            buf = g_string_append_c(buf, ':');
-                        }
-                    }
-                    if (count >= 2){
-                        buf = g_string_append(buf, params[count-1]); // reason
-                    }
-
-                    srn_chat_add_error_message_fmt(srv->cur_chat,
-                            _("ERROR[%1$3d] %2$s"), event, buf->str);
-
-                    g_string_free(buf, TRUE);
-                }
-                return;
             }
     }
 }
 
-static gboolean irc_period_ping(gpointer user_data){
+static gboolean do_period_ping(gpointer user_data){
     char timestr[64];
     unsigned long time;
     SrnServer *srv;
@@ -1905,4 +1927,42 @@ static gboolean irc_period_ping(gpointer user_data){
     sirc_cmd_ping(srv->irc, timestr);
 
     return G_SOURCE_CONTINUE;
+}
+
+/**
+ * @brief Helper function for adding general IRC numeric cerror message to UI.
+ * @param chat
+ * @param event
+ * @param origin
+ * @param params
+ * @param count
+ *
+ * Usually the params of error message is ["<nick>", ... "<reason>"].
+ */
+static void add_numeric_error_message(SrnChat *chat, int event, const char
+        *origin, const char **params, int count){
+    GString *buf;
+
+    g_return_if_fail(chat);
+
+    buf = g_string_new(NULL);
+
+    for (int i = 1; i < count - 1; i++){ // Skip nick params[0]
+        buf = g_string_append(buf, params[i]);
+        if (i != count - 2){
+            // Delimiter of params
+            buf = g_string_append_c(buf, ' ');
+        } else {
+            // Delimiter of reason
+            buf = g_string_append(buf, ": ");
+        }
+    }
+    if (count >= 2){
+        buf = g_string_append(buf, params[count-1]); // Reason
+    }
+
+    // Convert numeric event to 3-digits string
+    srn_chat_add_error_message_fmt(chat, _("ERROR[%1$3d] %2$s"), event, buf->str);
+
+    g_string_free(buf, TRUE);
 }

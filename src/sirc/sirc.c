@@ -37,6 +37,7 @@
 #include "srain.h"
 #include "log.h"
 #include "i18n.h"
+#include "utils.h"
 
 struct _SircSession {
     int bufptr;
@@ -44,6 +45,8 @@ struct _SircSession {
     GSocketClient *client;
     GIOStream *stream;
     GCancellable *cancel;
+    char *host;
+    int port;
 
     SircEvents *events; // Event callbacks
     SircConfig *cfg;
@@ -97,6 +100,7 @@ void sirc_free_session(SircSession *sirc){
 
     g_object_unref(sirc->client);
     g_object_unref(sirc->cancel);
+    str_assign(&sirc->host, NULL);
 
     g_free(sirc);
 }
@@ -142,13 +146,19 @@ void* sirc_get_ctx(SircSession *sirc){
 }
 
 void sirc_connect(SircSession *sirc, const char *host, int port){
+    char *escaped_host;
+
     g_return_if_fail(sirc);
     g_return_if_fail(host);
     g_return_if_fail(port > 0);
 
+    escaped_host = g_uri_escape_string(host, NULL, FALSE);
     g_cancellable_reset(sirc->cancel);
-    g_socket_client_connect_to_host_async (sirc->client, host,
+    str_assign(&sirc->host, escaped_host);
+    sirc->port = port;
+    g_socket_client_connect_to_host_async (sirc->client, escaped_host,
             port, sirc->cancel, on_connect_ready, sirc);
+    g_free(escaped_host);
 }
 
 void sirc_cancel_connect(SircSession *sirc){
@@ -227,8 +237,7 @@ static void on_recv_ready(GObject *obj, GAsyncResult *res, gpointer user_data){
     }
 
     /* Transcoding */
-    sirc_message_transcoding(imsg,
-            SRN_ENCODING, sirc->cfg->encoding, SRN_FALLBACK_CHAR);
+    sirc_message_transcoding(imsg, sirc->cfg->encoding);
     /* Handle event */
     sirc_event_hdr(sirc, imsg);
 
@@ -290,7 +299,6 @@ static void on_connect_ready(GObject *obj, GAsyncResult *res, gpointer user_data
     GError *err;
     GSocketClient *client;
     GSocketConnection *conn;
-    GSocketAddress *addr;
     SircSession *sirc;
 
     client = G_SOCKET_CLIENT(obj);
@@ -303,22 +311,14 @@ static void on_connect_ready(GObject *obj, GAsyncResult *res, gpointer user_data
         return;
     }
 
-    err = NULL;
-    addr = g_socket_connection_get_remote_address(conn, &err);
-    if (err){
-        ERR_FR("Get remote address : %d, %s", err->code, err->message);
-        g_error_free(err);
-    } else {
-        // DBG_FR("Remote address: %");
-        // TODO: show remote address
-        g_object_unref(addr);
-    }
-
     if (sirc->cfg->tls){
+         GSocketConnectable *addr;
          GIOStream *tls_conn;
 
          err = NULL;
-         tls_conn = g_tls_client_connection_new(G_IO_STREAM(conn), NULL, &err);
+         addr = g_network_address_new(sirc->host, sirc->port);
+         tls_conn = g_tls_client_connection_new(G_IO_STREAM(conn), addr, &err);
+         g_object_unref(addr);
          g_object_unref(conn);
          if (err){
              on_connect_fail(sirc, err->message);

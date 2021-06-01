@@ -197,6 +197,7 @@ SrnRet on_command_server(SrnCommand *cmd, void *user_data){
         GString *str;
 
         // Get a list of server name
+        srv_cfg_lst = NULL;
         ret = srn_config_manager_read_server_config_list(
                 app->cfg_mgr, &srv_cfg_lst);
         if (!RET_IS_OK(ret)){
@@ -885,6 +886,19 @@ SrnRet on_command_unrender(SrnCommand *cmd, void *user_data){
 
     return RET_OK(_("Messages of user \"%1$s\" of chat \"%2$s\" are no longer rendered by pattern \"%3$s\""),
             srv_user->nick, chat->name, pattern);
+}
+
+SrnRet on_command_quote(SrnCommand *cmd, void *user_data){
+    SrnServer *srv;
+    const char *msg;
+
+    srv = ctx_get_server(user_data);
+    g_return_val_if_fail(srv, SRN_ERR);
+
+    msg = srn_command_get_arg(cmd, 0);
+    g_return_val_if_fail(msg, SRN_ERR);
+
+    return sirc_cmd_raw(srv->irc, "%s\r\n", msg);
 }
 
 /*******************************************************************************

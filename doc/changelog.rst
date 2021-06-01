@@ -7,7 +7,191 @@ Change Log
     :depth: 1
     :backlinks: none
 
+.. Please write changelog as the following template:
+
+    .. _version-x.x.x:
+
+    YYYY-MM-DD Version X.X.X
+    ========================
+
+    - Features:
+
+      - XXX (:pull:`PULL_REQUEST_ID`)
+      - XXX (:issue:`ISSUE_ID`)
+      - XXX (:commit:`COMMID_ID`)
+
+    - Changes:
+
+      - XXX
+
+    - Bug fixes:
+
+      - XXX
+
 .. _version-latest:
+
+.. _version-1.2.0:
+
+2021-02-28 Version 1.2.0
+========================
+
+- Features:
+
+  - Switch build system from Make to Meson (:pull:`266`)
+  - Add FreeBSD implementations for ``srn_get_executable_{path,dir}``,
+    thanks to :people:`wahjava`
+  - Add ``/quote`` command for sending special IRC commands,
+    thanks to :people:`hno` (:pull:`283`)
+  - Add support for hiding server buffer (:pull:`287`)
+
+
+- Bug fixes:
+
+   - Fix an use-after-free BUG (:pull:`267`)
+   - Fix implicit declaration error on some systems,
+     thanks to :people:`lgbaldoni` (:pull:`270`)
+
+.. _version-1.1.3:
+
+2020-10-01 Version 1.1.3
+========================
+
+- Bug fixes:
+
+   - Fix an use-after-free BUG (:pull:`267`)
+
+.. _version-1.1.2:
+
+2020-08-10 Version 1.1.2
+========================
+
+.. note::
+
+    This release contains only improvement for MS Windows,
+    user of other platform can ignore it.
+
+- Features:
+
+  - Binary for MS Windows now can automatically built via Github Actions,
+    thanks to :people:`lifeibiren` (:pull:`259`), please refer to
+    :ref:`install-packages-windows` for more details
+
+- Changes:
+
+  - For ease of running on windows, Srain's executable path is added to the
+    search paths of {configuration,data} file. Thanks to :people:`lifeibiren`
+    (:pull:`259`)
+
+.. _version-1.1.1:
+
+2020-06-27 Version 1.1.1
+========================
+
+- Changes:
+
+  - Improve auto-scroll policy of message list (:pull:`255`)
+
+- Bug fixes:
+
+  - Fix TLS certificate verification error on glib-networking 2.64.3 (:issue:`251`)
+  - Fix crash when connecting to an invalid host (:issue:`234`)
+
+.. _version-1.1.0:
+
+2020-05-24 Version 1.1.0
+========================
+
+- Features:
+
+  - Support multiple selection of message (:issue:`138`)
+  - Support jump to mentioned message (:pull:`243`)
+  - Nickname will be highlighted when mentioned (:pull:`243`)
+  - Auto build deb package (:pull:`238`)
+
+- Changes:
+
+  - Improve fcous control of UI
+  - Replace appdata with metainfo (:pull:`240`)
+  - Validate metainfo with appstream-util (:issue:`242`)
+
+- Bug fixes:
+
+  - Some implicit declarations fixes (:pull:`236`)
+  - Some typo fixes (:pull:`239`)
+
+.. _version-1.0.2:
+
+2020-04-11 Version 1.0.2
+========================
+
+- Features:
+
+  - Add MAN documentation (:commit:`deaf723`)
+  - Add more predefined IRC networks: DALnet, EFnet, IRCnet, Undernet and QuakeNet (:pull:`228`)
+
+- Changes:
+
+  - Build: Allow setting CC variable via environment (:pull:`224`)
+  - Add channel related messages to corresponding buffer as possible (:issue:`149`)
+  - Improve widget focus control (:pull:`229`)
+  - Drop unused icons (:commit:`6239fe5`)
+  - Provide clearer error message when connecting (:pull:`233`)
+  - Update gentoo installation documentation :ref:`install-packages-gentoo` (:commit:`ceb5ca3`)
+
+- Bug fixes:
+
+  - Truncate long message before sendisg (:pull:`227`)
+  - Deal with invalid UTF-8 string (:commit:`50e7757`)
+  - Fix incorrect user number of channel user list (:pull:`230`)
+  - Fix incorrect icon install path (:commit:`9f07380`)
+
+.. _version-1.0.1:
+
+2020-03-14 Version 1.0.1
+========================
+
+- Features:
+
+  - Auto rename to original nick when ghost quit (:pull:`198`)
+  - Add hackint IRC network (:pull:`201`), thanks to :people:`kpcyrd`
+  - Add Dutch translation (:pull:`215`), thanks to :people:`Vistaus`
+  - Add two FAQs to documentation (:pull:`217`)
+  - Add debian pack script (:contrib-pull:`1`), thanks to :people:`tomac4t`.
+    Please refer to :ref:`install-packages-debian` to build a deb package
+
+- Changes:
+
+  - Move continuous integration from travis CI to github actions
+    (:pull:`203`, :pull:`204`), thanks to :people:`tomac4t`
+  - Make header bar buttons repect default belief (:pull:`205`, :pull:`218`)
+
+- Bug fixes:
+
+  - Fix case sensitivity issue for IRC messages (:pull:`202`),
+    thanks to :people:`hhirtz`
+  - Fix invalid changelog section of appdata file (:pull:`214`)
+  - Fix missing dependences in documentation (:pull:`216`),
+    thanks to :people:`avoidr`
+
+.. _version-1.0.0:
+
+2020-02-24 Version 1.0.0
+========================
+
+- Changes:
+
+  - Some code cleanup
+  - Update :doc:`./start` documentation
+
+- Bug fixes:
+
+  - Allow Srain runs without dbus secrets service (:issue:`195`)
+  - Fix nick generation logical (:commit:`39ced08`)
+
+.. note::
+
+    1.0.0 is the first stable release of Srain, enjoy!
+
 .. _version-1.0.0rc9999:
 
 2019-10-07 Version 1.0.0rc9999
@@ -24,7 +208,7 @@ Change Log
 
   - Replace all icons with freedesktop standard icons (:issue:`120`)
 
-- Bug fixs:
+- Bug fixes:
 
   - Fix wrong usage of GError (:issue:`179`)
   - Fix image preview problem when image is hard to detect type (:issue:`163`)
@@ -82,21 +266,15 @@ Change Log
 2019-04-14 Version 1.0.0rc3
 ===========================
 
-.. note:: TODO.
-
 .. _version-1.0.0rc2:
 
 2019-01-24 Version 1.0.0rc2
 ===========================
 
-.. note:: TODO.
-
 .. _version-1.0.0rc1:
 
 2018-09-10 Version 1.0.0rc1
 ===========================
-
-.. note:: TODO.
 
 .. _version-0.06.4:
 
@@ -287,10 +465,6 @@ Change Log
   - More friendly User interface
   - Stronger {upload,avatar} plugin
   - Fixed a lot of bugs
-
-.. note::
-
-    0.05 is the first stable release of Srain, enjoy~
 
 2016-04-30 Version 0.03
 =======================

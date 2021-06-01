@@ -2,6 +2,11 @@
 Frequently Asked Questions
 ==========================
 
+Frequently asked questions are listed here,
+you can visit `issue page`_ to see more questions that asked by our users.
+
+.. _issue page: https://github.com/SrainApp/srain/issues?q=label%3Aquestion
+
 .. contents::
     :local:
     :depth: 3
@@ -12,28 +17,6 @@ Does Srain support Windows?
 
 Yes, please refer to :ref:`install-packages-windows`.
 
-Why does the image upload button not work?
-==========================================
-
-This function is implemented by a python plugin, therefore you should install
-``python3-urllib3`` and ``python3-request`` to let it work.
-
-.. warning:: Image upload function is unavailable after :ref:`version-1.0.0rc1`.
-
-Why can't I see people's avatar?
-================================
-
-There is not a specification for user avatar in IRC protocol
-(`IRCv3`_ has an idea about it), so currently the avatar function is simply
-implemented by a python plugin, therefore you should install
-``python3-urllib3`` and ``python3-request`` to let it work.
-
-Besides, you should set ``show_avatar`` to ``true`` in your configuration.
-
-.. _IRCv3: http://ircv3.net/
-
-.. warning:: Avatar function is unavailable after :ref:`version-1.0.0rc1`.
-
 .. _faq-relay-message-transform:
 
 What is "relay message transform"?
@@ -42,12 +25,17 @@ What is "relay message transform"?
 There are many relay bots forward messages from other IM to IRC network,
 "Relay message transform" make these messages easier to read.
 
-For example:
+For example, there is a telegram bot named "telegram", the words in brackets
+is the named of the telegram user.
 
-.. image:: http://img.vim-cn.com/7f/5211f94b8bcfabf16a852907bc76001ee321be.png
+.. figure:: _static/srain-render-message-before.png
 
-To enable "relay message transform", check :ref:`commands-relay` for more
-details.
+Run command ``/pattern add normal-relay \[(?<sender>[^:]+?)\] (?<content>.*)``
+and ``/render telegram normal-relay``, you get:
+
+.. figure:: _static/srain-render-message-after.png
+
+For more details, please refer to `commands-pattern` and `commands-render`.
 
 Where are the log files?
 ========================
@@ -64,11 +52,36 @@ Refer to :ref:`commands-syntax`.
 How can I remove my stored password?
 ====================================
 
-Since :ref:`version-1.0.0rc4`, Srain supports password storage.
-
 Just leave the password entry empty and check the "Remember password" checkbox
 before connect to server or join channel, the corresponding password will be
 removed.
 
 Or you can use `secret-tool` (provided by libsecret) to manage all your stored
 passwords.
+
+How can I hide JOIN/PART messages of channel?
+=============================================
+
+So far, Srain has not yet a specialized option for hiding such messages.
+You can use write regular expression to filter them::
+
+    /pattern add filter-join ^\w+ has joined$
+    /filter filter-join
+    /pattern add filter-part ^\w+ has left: .*$
+    /filter filter-part
+
+.. NOTE:: The content of regular expression depends on your language.
+
+Why can't I login to my ZNC server?
+===================================
+
+According `ZNC's FAQ`_, way  2, supply your "user@phone/network:pass"
+(without quotes) in the server password field. Other as usual.
+
+.. NOTE::
+
+   Way 1 in `ZNC's FAQ`_ requires username field can be set via connection panel,
+   which will be supported by Srain in the future.
+
+
+.. _ZNC's FAQ: https://wiki.znc.in/FAQ#Why_do_I_get_an_.22Incorrect_Password.22_every_time_I_connect_even_though_my_pass_is_correct.3F

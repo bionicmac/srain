@@ -57,8 +57,8 @@ struct _SuiWindow {
     GtkPaned *title_paned;
     GtkBox *window_box;
     GtkSeparator *header_separator;
-    GtkStack *header_box;
-    GtkStack *header_paned;
+    GtkBox *header_box;
+    GtkPaned *header_paned;
     GtkStack *window_stack;
 
     /* Side header */
@@ -94,6 +94,8 @@ struct _SuiWindow {
 
     /* Panels */
     SuiConnectPanel *connect_panel;
+
+    gboolean server_visibility;
 };
 
 struct _SuiWindowClass {
@@ -104,9 +106,11 @@ static void sui_window_set_events(SuiWindow *self, SuiWindowEvents *events);
 
 static void update_header(SuiWindow *self);
 static void update_title(SuiWindow *self);
+static void update_focus(SuiWindow *self);
 static int get_buffer_count(SuiWindow *self);
 static void send_message_cancel(SuiWindow *self);
 static void send_message(SuiWindow *self);
+static void set_server_visibility(SuiWindow* self);
 
 static void on_destroy(SuiWindow *self);
 static void on_notify_is_active(GObject *object, GParamSpec *pspec,
@@ -201,6 +205,8 @@ static void sui_window_init(SuiWindow *self){
             G_BINDING_BIDIRECTIONAL);
 
     self->send_timer = 0;
+    self->server_visibility = TRUE;
+
 
     /* Stack side bar init */
     self->side_bar = sui_side_bar_new();
@@ -266,6 +272,8 @@ static void sui_window_constructed(GObject *object){
 
     self = SUI_WINDOW(object);
     if (!self->cfg->csd){
+        gtk_widget_show(GTK_WIDGET(self->header_box));
+
         /* Move side header widgets from side_header_bar to side_header_box */
         gtk_container_remove(GTK_CONTAINER(self->side_header_bar),
                 GTK_WIDGET(self->side_left_header_box));
@@ -294,6 +302,8 @@ static void sui_window_constructed(GObject *object){
         // Show the seperator
         gtk_widget_show(GTK_WIDGET(self->header_separator));
     } else {
+        gtk_widget_hide(GTK_WIDGET(self->header_box));
+
         // Use appliaction icon instead of standard icon when CSD enabled
         gtk_image_set_from_icon_name(self->start_image, PACKAGE,
                 GTK_ICON_SIZE_BUTTON);
@@ -399,6 +409,7 @@ void sui_window_add_buffer(SuiWindow *self, SuiBuffer *buf){
     g_string_free(gstr, TRUE);
 
     gtk_stack_set_visible_child(self->buffer_stack, GTK_WIDGET(buf));
+    set_server_visibility(self);
 }
 
 void sui_window_rm_buffer(SuiWindow *self, SuiBuffer *buf){
@@ -436,6 +447,11 @@ SuiBuffer* sui_window_get_buffer(SuiWindow *self,
 
 SuiSideBar* sui_window_get_side_bar(SuiWindow *self){
     return self->side_bar;
+}
+
+void sui_window_toggle_server_visibility(SuiWindow* self){
+    self->server_visibility = !self->server_visibility;
+    set_server_visibility(self);
 }
 
 int sui_window_is_active(SuiWindow *self){
@@ -537,6 +553,19 @@ static void update_title(SuiWindow *self){
     }
 }
 
+static void update_focus(SuiWindow *self){
+    const char *page;
+
+    page = gtk_stack_get_visible_child_name(self->window_stack);
+    if (g_strcmp0(page, WINDOW_STACK_PAGE_WELCOME) == 0){
+        // No need to grap focus of self->connect_panel because it isn't focusable.
+    } else if (g_strcmp0(page, WINDOW_STACK_PAGE_MAIN) == 0){
+        gtk_widget_grab_focus(GTK_WIDGET(self->input_text_view));
+    } else {
+        g_warn_if_reached();
+    }
+}
+
 static int get_buffer_count(SuiWindow *self){
     return g_list_length(
             gtk_container_get_children(GTK_CONTAINER(self->buffer_stack)));
@@ -551,7 +580,7 @@ static void send_message(SuiWindow *self){
 
     gtk_image_set_from_icon_name(
             GTK_IMAGE(gtk_button_get_image(self->send_button)),
-            "document-revert", GTK_ICON_SIZE_BUTTON);
+            "document-revert-symbolic", GTK_ICON_SIZE_BUTTON);
 }
 
 static void send_message_cancel(SuiWindow *self){
@@ -563,7 +592,21 @@ static void send_message_cancel(SuiWindow *self){
 
     gtk_image_set_from_icon_name(
             GTK_IMAGE(gtk_button_get_image(self->send_button)),
-            "document-send", GTK_ICON_SIZE_BUTTON);
+            "document-send-symbolic", GTK_ICON_SIZE_BUTTON);
+}
+
+static void set_server_visibility(SuiWindow* self){
+    GList *lst = gtk_container_get_children(GTK_CONTAINER(self->buffer_stack));
+    while (lst) {
+        if (SUI_IS_SERVER_BUFFER(lst->data)) {
+            SuiBuffer *buf = SUI_BUFFER(lst->data);
+            SuiSideBarItem *item = sui_side_bar_get_item(self->side_bar, buf);
+            g_return_if_fail(item);
+            gtk_widget_set_visible(GTK_WIDGET(item), self->server_visibility);
+            sui_side_bar_item_update(item, NULL, "");
+        }
+        lst = g_list_next(lst);
+    }
 }
 
 static void on_destroy(SuiWindow *self){
@@ -740,6 +783,7 @@ static void window_stack_on_child_changed(GtkWidget *widget, GParamSpec *pspec,
     self = user_data;
     update_header(self);
     update_title(self);
+    update_focus(self);
 }
 
 static void buffer_stack_on_child_changed(GtkWidget *widget, GParamSpec *pspec,

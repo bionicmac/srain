@@ -3,11 +3,11 @@ Installation
 ============
 
 Srain is available on :ref:`install-packages-gnu-linux`,
-:ref:`install-packages-windows` and :ref:`install-packages-macos`.
+:ref:`install-packages-windows`, :ref:`install-packages-macos` and
+:ref:`install-packages-bsd`.
 
 .. contents::
     :local:
-    :depth: 3
     :backlinks: none
 
 .. _install-dependencies:
@@ -15,21 +15,24 @@ Srain is available on :ref:`install-packages-gnu-linux`,
 Dependencies
 ============
 
-=================== =================================================== =======
+=================== =================================================== ========
 Name                Notes                                               Version
-=================== =================================================== =======
+=================== =================================================== ========
+meson               Only for Building                                   > 0.45.0
+make                Optional, only for development
 coreutils           Only for building
-make                Only for building
 gcc                 Only for building
 pkg-config          Only for building
-gettext
+gettext             Only for building
 glib2
-glib-networking     Optional, For TLS connection support
+glib-networking     Optional, for TLS connection support
 gtk+3                                                                   >= 3.18
 libsoup
 libconfig                                                               >= 1.5
 libsecret
-=================== =================================================== =======
+openssl
+python-sphinx       Optional, for building documentation
+=================== =================================================== ========
 
 .. _install-building:
 
@@ -42,14 +45,11 @@ before the following steps.
 Firstly, download source code of srain,
 you can get source code of latest release:
 
-.. note::
+.. parsed-literal::
 
-   The development of 1.0 release is working in progress.
-
-..
-    $ wget https://github.com/SrainApp/srain/archive/1.0.0rc9999.tar.gz
-    $ tar -xvzf 1.0.0rc9999.tar.gz
-    $ cd srain-1.0.0rc9999
+    $ wget https://github.com/SrainApp/srain/archive/|release|.tar.gz
+    $ tar -xvzf |release|.tar.gz
+    $ cd srain-|release|
 
 Or get git version:
 
@@ -58,33 +58,53 @@ Or get git version:
     $ git clone https://github.com/SrainApp/srain.git
     $ cd srain
 
-Setup build options and start building:
+Play with Meson
+---------------
+
+Srain use `Meson`_ with ninja backend as its build system.
+You can build it via the following commands:
 
 .. code-block:: console
 
-   $ ./configure                     \
-         --prefix=/usr/local         \
-         --datadir=/usr/local/share  \
-         --sysconfdir=/etc
-   $ make
-
-.. note::
-
-    The ``configure`` script **DOES NOT** check any dependience.
-    You should make sure that you have all dependencies installed.
+   $ meson setup builddir
+   $ cd builddir
+   $ ninja
 
 Install(root privileges required):
 
 .. code-block:: console
 
-   # make install
+   $ cd builddir
+   # ninja install
 
-Build and install documentation:
+HTML documentation and manpage are built and installed by default,
+if you don't need them, just set meson option ``doc_builders`` to an empty array
+when setup:
 
 .. code-block:: console
 
-   $ make doc
-   # make install-doc
+   $ meson setup -Ddoc_builders=[] builddir
+
+.. _Meson: https://mesonbuild.com
+
+Makefile Helper
+---------------
+
+We also provide a simple Makefile helper to simplify meson commands.
+It is convenient for development.
+
+.. code-block:: console
+
+   $ make           # Build srain
+   $ make build     # Same as above
+   $ make install   # Install srain to prefix under project root
+   $ make run       # Run srain with isolated $HOME and XDG Directory
+   $ make debug     # Same as `make run`, but with GDB attached
+   $ make inspect   # Same as `make run`, but with GtkInspector
+   $ make clean     # Remove all compilation and installation result
+   $ make doc       # View installed HTML documentation
+
+.. _Meson: https://mesonbuild.com
 
 Distribution Packages
 =====================
@@ -116,16 +136,39 @@ If you are the user of `Arch Linux CN Repository`_, try:
 .. _srain-git: https://aur.archlinux.org/packages/srain-git
 .. _Arch Linux CN Repository: https://www.archlinuxcn.org/archlinux-cn-repo-and-mirror
 
+.. _install-packages-debian:
+
 Debian
 ~~~~~~
 
-.. warning:: This package is **broken** now.
+There is no srain package in the official repository yet.
 
-`dfceaef`_ has written `Debian package script for Srain`_, but it is already
-**out of date**, I will be glad if anyone can fix it.
+Pre-built package
+.................
 
-.. _dfceaef: https://github.com/yangfl
-.. _Debian package script for Srain: https://github.com/SrainApp/srain/tree/debian/debian
+We provide pre-built deb package that you can get it from `Github release page`_.
+
+Build byself
+............
+
+Copy the debian folder on `srain-contrib`_ to srain folder. Then type following
+command on your terminal:
+
+.. code-block:: console
+
+    $ dpkg-buildpackage -b -us -uc
+
+Note that the dependencies mentioned above also should be installed. The
+details could be found on `debian/crontrol`_ file.
+
+Then install the package (replace package name with the name of your package):
+
+.. parsed-literal::
+
+    $ sudo apt-get install -f ../srain\_\ |release|-1_amd64.deb
+
+.. _srain-contrib: https://github.com/SrainApp/srain-contrib/tree/master/pack/
+.. _debian/crontrol: https://github.com/SrainApp/srain-contrib/blob/master/pack/debian/control
 
 .. _install-packages-flatpak:
 
@@ -160,14 +203,14 @@ you already have flatpak installed:
 .. _Flatpak manifest for Srain: https://github.com/SrainApp/srain-contrib/tree/master/pack/flatpak
 .. _Flathub: https://flathub.org
 
+.. _install-packages-gentoo:
+
 Gentoo
 ~~~~~~
 
-`rtlanceroad`_ is maintaining `Gentoo ebuilds for Srain`_, please refer to it
-for more details.
+Please refers to `gentoo portage overlays`_.
 
-.. _rtlanceroad: https://github.com/rtlanceroad
-.. _Gentoo ebuilds for Srain: https://github.com/SrainApp/srain-contrib/tree/master/pack/gentoo
+.. _gentoo portage overlays: https://gpo.zugaina.org/net-im/srain
 
 .. _install-packages-opensuse:
 
@@ -185,12 +228,21 @@ following this link to install it.
 Windows
 -------
 
-.. warning:: Windows support of Srain is still experimental.
-
 Srain requires Windows 7 or later.
 
-The easiest way to build/run Srain on Windows is using the toolchains provided
-by `MSYS2 project`_.
+Pre-built package
+~~~~~~~~~~~~~~~~~
+
+After :ref:`version-1.1.2`, we provide Windows portable binary that you can
+get it from `Github release page`_.
+
+.. _Github release page: https://github.com/SrainApp/srain/releases
+
+Build byself
+~~~~~~~~~~~~
+
+If you want to build Srain on Windows youself,
+you should use the toolchains provided by `MSYS2 project`_.
 
 Firstly install MSYS2, then open a MSYS2 shell, install the basic build tools:
 
@@ -242,3 +294,15 @@ Firstly install `Homebrew`_, run the following commands to install dependencies:
 .. _Homebrew: https://brew.sh/
 
 Then follow the steps in :ref:`install-building`.
+
+.. _install-packages-bsd:
+
+BSD
+---
+
+OpenBSD
+~~~~~~~
+
+Please refers to `OpenBSD Ports`_.
+
+.. _OpenBSD Ports: https://openports.se/net/srain

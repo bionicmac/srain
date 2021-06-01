@@ -2,10 +2,13 @@
 Srain
 =====
 
-|ci-status| |channel|
+|ci-status| |doc-status| |channel|
 
-.. |ci-status| image:: https://travis-ci.org/SrainApp/srain.svg?branch=master
-   :target: https://travis-ci.org/SrainApp/srain
+.. |ci-status| image:: https://github.com/SrainApp/srain/workflows/build/badge.svg?branch=master
+   :target: https://github.com/SrainApp/srain/actions
+
+.. |doc-status| image:: https://readthedocs.org/projects/srain/badge/?version=latest
+    :target: https://doc.srain.im/en/latest/
 
 .. |channel| image:: https://img.shields.io/badge/channel-%23srain-brightgreen.svg
    :target: ircs://chat.freenode.net/#srain
@@ -17,6 +20,8 @@ Modern IRC client written in GTK.
 .. _Home: https://srain.im
 .. _Documentation: https://doc.srain.im
 .. _Source code: https://github.com/SrainApp/srain
+
+.. image:: https://srain.im/assets/images/cover.png
 
 Packaging Status
 ================
@@ -32,7 +37,7 @@ Features
 - Fully open source
 - RFC {1459,2812} compatible
 - Partial `IRCv3`_ support
-- Multi-platform support (Linux, Windows and macOS)
+- Multi-platform support (Linux, Windows, macOS and BSD)
 - Act like modern IM client
 
   - Graphical user interface
@@ -55,10 +60,14 @@ Features
 Need Help?
 ==========
 
+`Frequently Asked Questions`_ may be helpful.
+
 Feel free to contact us if you have any question about Srain.
 
 - IRC Channel: `#srain <ircs://chat.freenode.org:6697/srain>`_ @ freenode
 - Github: file an issue `Here <https://github.com/SrainApp/srain/issues>`_
+
+.. _Frequently Asked Questions: https://doc.srain.im/en/latest/faq.html
 
 License
 =======

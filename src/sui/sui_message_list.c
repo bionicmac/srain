@@ -22,8 +22,6 @@
  * @author Shengyu Zhang <i@silverrainz.me>
  * @version 0.06.2
  * @date 2016-05-19
- *
- * TODO: Smooth scroll support.
  */
 
 #include <gtk/gtk.h>
@@ -43,27 +41,38 @@ struct _SuiMessageList {
     GtkScrolledWindow *scrolled_window;
     GtkViewport *viewport;
     GtkListBox *list_box;
+
+    // Message list toolbar
+    GtkRevealer *tool_bar_revealer;
+    GtkButton *clear_selection_button;
+    GtkButton *go_prev_mention_button;
+    GtkButton *go_next_mention_button;
     GtkButton *go_bottom_button;
-    SuiMessage *first_msg;
-    SuiMessage *last_msg;
+
+    SuiMessage *first_msg; // Current first message
+    GtkListBoxRow *first_row; // Container of first_msg
+    SuiMessage *last_msg; // Current last message
+    GtkListBoxRow *last_row; // Container of last_msg
 };
 
 struct _SuiMessageListClass {
     GtkBoxClass parent_class;
 };
 
-static int get_list_box_length(GtkListBox *list_box);
 static void scroll_to_bottom(SuiMessageList *self);
 static gboolean scroll_to_bottom_timeout(gpointer user_data);
 static void smart_scroll(SuiMessageList *self);
 static double get_page_count_to_bottom(SuiMessageList *self);
+static void go_next_mentioned_row(SuiMessageList *self, GtkDirectionType dir);
 
 static void scrolled_window_on_edge_reached(GtkScrolledWindow *swin,
                GtkPositionType pos, gpointer user_data);
 static void scrolled_window_on_edge_overshot(GtkScrolledWindow *swin,
         GtkPositionType pos, gpointer user_data);
-static void scrolled_window_vadjustment_on_value_changed(
-        GtkAdjustment *adjustment, gpointer user_data);
+static void clear_selection_button_on_click(GtkButton *button, gpointer user_data);
+static void go_prev_mention_button_on_click(GtkButton *button, gpointer user_data);
+static void go_next_mention_button_on_click(GtkButton *button, gpointer user_data);
+static void list_box_on_selected_rows_changed(GtkListBox *box, gpointer user_data);
 
 /*****************************************************************************
  * GObject functions
@@ -78,19 +87,21 @@ static void sui_message_list_init(SuiMessageList *self){
             G_CALLBACK(scrolled_window_on_edge_overshot), self);
     g_signal_connect(self->scrolled_window, "edge-reached",
             G_CALLBACK(scrolled_window_on_edge_reached), self);
+    g_signal_connect(self->clear_selection_button, "clicked",
+            G_CALLBACK(clear_selection_button_on_click), self);
+    g_signal_connect(self->go_prev_mention_button, "clicked",
+            G_CALLBACK(go_prev_mention_button_on_click), self);
+    g_signal_connect(self->go_next_mention_button, "clicked",
+            G_CALLBACK(go_next_mention_button_on_click), self);
     g_signal_connect_swapped(self->go_bottom_button, "clicked",
             G_CALLBACK(scroll_to_bottom), self);
-    g_signal_connect(
-            gtk_scrolled_window_get_vadjustment(self->scrolled_window),
-            "value-changed",
-            G_CALLBACK(scrolled_window_vadjustment_on_value_changed), self);
+    g_signal_connect(self->list_box, "selected-rows-changed",
+            G_CALLBACK(list_box_on_selected_rows_changed), self);
 
-    g_object_bind_property(
-            gtk_scrolled_window_get_vscrollbar(self->scrolled_window),
-            "opacity",
-            self->go_bottom_button,
-            "opacity",
-            0);
+    // Tell GtkScrolledWindow scrolls to show a row of GtkListBox when it is
+    // focused. It is required by gtk_container_set_focus_child().
+    gtk_container_set_focus_vadjustment(GTK_CONTAINER(self->list_box),
+            gtk_scrolled_window_get_vadjustment(self->scrolled_window));
 }
 
 static void sui_message_list_finalize(GObject *object){
@@ -119,6 +130,10 @@ static void sui_message_list_class_init(SuiMessageListClass *class){
     gtk_widget_class_bind_template_child(widget_class, SuiMessageList, scrolled_window);
     gtk_widget_class_bind_template_child(widget_class, SuiMessageList, viewport);
     gtk_widget_class_bind_template_child(widget_class, SuiMessageList, list_box);
+    gtk_widget_class_bind_template_child(widget_class, SuiMessageList, tool_bar_revealer);
+    gtk_widget_class_bind_template_child(widget_class, SuiMessageList, clear_selection_button);
+    gtk_widget_class_bind_template_child(widget_class, SuiMessageList, go_prev_mention_button);
+    gtk_widget_class_bind_template_child(widget_class, SuiMessageList, go_next_mention_button);
     gtk_widget_class_bind_template_child(widget_class, SuiMessageList, go_bottom_button);
 }
 
@@ -147,7 +162,7 @@ void sui_message_list_scroll_down(SuiMessageList *self, double step){
 
 void sui_message_list_append_message(SuiMessageList *self, SuiMessage *msg,
         GtkAlign halign){
-    GtkBox *box;
+    GtkListBoxRow *row;
 
     if (self->last_msg
             && (G_OBJECT_TYPE(msg) == G_OBJECT_TYPE(self->last_msg))) {
@@ -155,11 +170,16 @@ void sui_message_list_append_message(SuiMessageList *self, SuiMessage *msg,
         sui_message_compose_prev(msg, self->last_msg);
     }
     self->last_msg = msg;
+    if (!self->first_msg) {
+        self->first_msg = msg;
+    }
 
-    box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
-    gtk_box_pack_start(box, GTK_WIDGET(msg), TRUE, TRUE, 0);
-    gtk_widget_set_halign(GTK_WIDGET(msg), halign);
-    sui_common_add_gtk_list_box_unfocusable_row(self->list_box, GTK_WIDGET(box));
+    row = sui_common_unfocusable_list_box_row_new(GTK_WIDGET(msg));
+    gtk_list_box_insert(self->list_box, GTK_WIDGET(row), -1);
+    self->last_row = row;
+    if (!self->first_row) {
+        self->first_row = row;
+    }
 
     smart_scroll(self);
 }
@@ -167,6 +187,7 @@ void sui_message_list_append_message(SuiMessageList *self, SuiMessage *msg,
 void sui_message_list_prepend_message(SuiMessageList *self, SuiMessage *msg,
         GtkAlign halign){
     GtkBox *box;
+    GtkListBoxRow *row;
 
     if (self->first_msg
             && (G_OBJECT_TYPE(msg) == G_OBJECT_TYPE(self->first_msg))) {
@@ -174,11 +195,19 @@ void sui_message_list_prepend_message(SuiMessageList *self, SuiMessage *msg,
         sui_message_compose_next(msg, self->first_msg);
     }
     self->first_msg = msg;
+    if (!self->last_msg) {
+        self->last_msg = msg;
+    }
 
     box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
     gtk_box_pack_start(box, GTK_WIDGET(msg), TRUE, TRUE, 0);
     gtk_widget_set_halign(GTK_WIDGET(msg), halign);
-    gtk_list_box_prepend(self->list_box, GTK_WIDGET(box)); // FIXME: theme & fcous
+    row = sui_common_unfocusable_list_box_row_new(GTK_WIDGET(box));
+    gtk_list_box_prepend(self->list_box, GTK_WIDGET(row));
+    self->first_row = row;
+    if (!self->last_row) {
+        self->last_row = row;
+    }
 
     smart_scroll(self);
 }
@@ -200,18 +229,10 @@ GList *sui_message_list_get_recent_messages(SuiMessageList *self, int limit){
     while (lst && limit){
         GtkListBoxRow *row;
         SuiMessage *msg;
-        GtkBox *box;
-        GList *box_child;
 
         row = GTK_LIST_BOX_ROW(lst->data);
-        box = GTK_BOX(gtk_bin_get_child(GTK_BIN(row)));
-        box_child = gtk_container_get_children(GTK_CONTAINER(box));
-        g_return_val_if_fail(box_child, NULL);
-
-        msg = SUI_MESSAGE(box_child->data);
+        msg = SUI_MESSAGE(gtk_bin_get_child(GTK_BIN(row)));
         msgs = g_list_append(msgs, msg);
-
-        g_list_free(box_child);
 
         lst = g_list_previous(lst);
         limit--;
@@ -225,10 +246,6 @@ GList *sui_message_list_get_recent_messages(SuiMessageList *self, int limit){
  * Static functions
  *****************************************************************************/
 
-static int get_list_box_length(GtkListBox *list_box){
-    return g_list_length(gtk_container_get_children(GTK_CONTAINER(list_box)));
-}
-
 static void scroll_to_bottom(SuiMessageList *self){
     if (self->scroll_timer){
         return;
@@ -240,16 +257,12 @@ static void scroll_to_bottom(SuiMessageList *self){
 }
 
 static gboolean scroll_to_bottom_timeout(gpointer user_data){
-    GtkAdjustment *adj;
     SuiMessageList *self;
 
     self = SUI_MESSAGE_LIST(user_data);
-
-    /* Scroll to bottom */
-    adj = gtk_scrolled_window_get_vadjustment(self->scrolled_window);
-    gtk_adjustment_set_value(adj, gtk_adjustment_get_upper(adj) -
-            gtk_adjustment_get_page_size(adj));
-
+    // Scroll to bottom by setting focus to last row
+    gtk_container_set_focus_child(GTK_CONTAINER(self->list_box),
+            GTK_WIDGET(self->last_row));
     self->scroll_timer = 0;
 
     return G_SOURCE_REMOVE;
@@ -263,7 +276,7 @@ static gboolean scroll_to_bottom_timeout(gpointer user_data){
  *
  * This function called when a message added to ``SuiMessageList``.
  * If:
- * - The top-level window is visiable;
+ * - The top-level window is active;
  * - And the SuiMessageList itself is child of current ``SuiBuffer``;
  * - The scroll bar is near the bottom of the list box
  *   (If not, the user may be browsing previous messages).
@@ -279,10 +292,10 @@ static void smart_scroll(SuiMessageList *self){
     buf = sui_window_get_cur_buffer(win);
     g_return_if_fail(SUI_IS_BUFFER(buf));
 
-    if (sui_buffer_get_message_list(buf) != self){
+    if (!sui_window_is_active(win)) {
         return;
     }
-    if (!gtk_widget_get_visible(GTK_WIDGET(win))){
+    if (sui_buffer_get_message_list(buf) != self){
         return;
     }
 
@@ -313,16 +326,11 @@ static void scrolled_window_on_edge_overshot(GtkScrolledWindow *swin,
 
 static void scrolled_window_on_edge_reached(GtkScrolledWindow *swin,
                GtkPositionType pos, gpointer user_data){
-    SuiMessageList *self;
-
-    self = SUI_MESSAGE_LIST(user_data);
-
     switch (pos) {
         case GTK_POS_TOP:
             break;
         case GTK_POS_BOTTOM:
             // TODO: Dynamic free
-            gtk_widget_hide(GTK_WIDGET(self->go_bottom_button));
             break;
         default:
             break;
@@ -347,15 +355,73 @@ static double get_page_count_to_bottom(SuiMessageList *self) {
     return (max_val - val) / page_size;
 }
 
-static void scrolled_window_vadjustment_on_value_changed(
-        GtkAdjustment *adj, gpointer user_data){
+static void clear_selection_button_on_click(GtkButton *button, gpointer user_data) {
     SuiMessageList *self;
 
-    self = SUI_MESSAGE_LIST((user_data));
+    self = user_data;
+    gtk_list_box_unselect_all(self->list_box);
+}
 
-    // The go bottom button appears each time the distance from current
-    // position to bottom is greater than 0.5 page (we think user is browsing
-    // message now).
-    gtk_widget_set_visible(GTK_WIDGET(self->go_bottom_button),
-            get_page_count_to_bottom(self) > 0.5);
+static void go_prev_mention_button_on_click(GtkButton *button, gpointer user_data) {
+    SuiMessageList *self;
+
+    self = user_data;
+    go_next_mentioned_row(self, GTK_DIR_UP);
+}
+
+static void go_next_mention_button_on_click(GtkButton *button, gpointer user_data) {
+    SuiMessageList *self;
+
+    self = user_data;
+    go_next_mentioned_row(self, GTK_DIR_DOWN);
+}
+
+static void go_next_mentioned_row(SuiMessageList *self, GtkDirectionType dir) {
+    int step;
+    int index;
+
+    g_return_if_fail(dir == GTK_DIR_UP || dir == GTK_DIR_DOWN);
+    step = dir == GTK_DIR_UP ? -1 : 1;
+
+    if (gtk_list_box_get_selected_row(self->list_box)) {
+        // Starts from next row of selected row
+        index = gtk_list_box_row_get_index(
+                gtk_list_box_get_selected_row(self->list_box));
+        index += step;
+    } else if (dir == GTK_DIR_UP && self->last_row) {
+        // Starts from last row
+        index = gtk_list_box_row_get_index(self->last_row);
+    } else if (dir == GTK_DIR_DOWN && self->first_row) {
+        // Starts from first row
+        index = gtk_list_box_row_get_index(self->first_row);
+    } else {
+        // No any row in list
+        return;
+    }
+
+    // Fine next mentioned message
+    for (int i = index;
+            gtk_list_box_get_row_at_index(self->list_box, i) != NULL; i += step) {
+        GtkListBoxRow *row;
+        SuiMessage *msg;
+
+        row = gtk_list_box_get_row_at_index(self->list_box, i);
+        msg = SUI_MESSAGE(gtk_bin_get_child(GTK_BIN(row)));
+        if (sui_message_is_mentioned(msg)) {
+            // Focus and select
+            gtk_list_box_unselect_all(self->list_box);
+            gtk_list_box_select_row(self->list_box, row);
+            gtk_container_set_focus_child(GTK_CONTAINER(self->list_box), GTK_WIDGET(row));
+            break;
+        }
+    }
+}
+
+static void list_box_on_selected_rows_changed(GtkListBox *box,
+        gpointer user_data) {
+    SuiMessageList *self;
+
+    self = user_data;
+    gtk_revealer_set_reveal_child(self->tool_bar_revealer,
+            gtk_list_box_get_selected_row(box) != NULL);
 }

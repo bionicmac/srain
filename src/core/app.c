@@ -58,12 +58,11 @@ SrnApplication* srn_application_new(void){
     // Keep only one instance
     g_return_val_if_fail(!app_instance, NULL);
 
-    ver = srn_version_new(PACKAGE_VERSION PACKAGE_BUILD);
+    ver = srn_version_new(PACKAGE_VERSION "-" PACKAGE_BUILD);
     ret = srn_version_parse(ver);
     if (!RET_IS_OK(ret)){
-        ERR_FR("Failed to parse " PACKAGE_VERSION PACKAGE_BUILD
-                "as application version: %s", RET_MSG(ret));
-        return NULL;
+        WARN_FR("Failed to parse " PACKAGE_VERSION "-" PACKAGE_BUILD
+                " as application version: %s", RET_MSG(ret));
     }
 
     // Init config
@@ -263,7 +262,7 @@ SrnRet srn_application_add_server_with_config(SrnApplication *app,
     while (lst) {
         srv = lst->data;
         if (g_ascii_strcasecmp(srv->name, name) == 0){
-            return SRN_ERR;
+            return RET_ERR(_("Server \"%1$s\" already exists"), name);
         }
         lst = g_list_next(lst);
     }

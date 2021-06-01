@@ -63,7 +63,7 @@ struct _SrnServerUser {
     bool is_me;
     bool is_server;
     bool is_online;
-    bool is_ignored;            // TODO: New implementation of ignore list
+    bool is_ignored;
     bool is_away;
     bool is_secure;
 
@@ -245,6 +245,8 @@ void srn_server_config_clear_addr(SrnServerConfig *cfg);
 SrnUserConfig* srn_user_config_new(void);
 void srn_user_config_free(SrnUserConfig *self);
 SrnRet srn_user_config_check(SrnUserConfig *self);
+char* srn_user_config_get_next_alternate_nick(SrnUserConfig *self, const char *cur_nick);
+bool srn_user_config_is_alternate_nick(SrnUserConfig *self, const char *nick);
 
 SrnLoginConfig* srn_login_config_new(void);
 void srn_login_config_free(SrnLoginConfig *self);

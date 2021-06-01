@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2019 Shengyu Zhang <i@silverrainz.me>
+/* Copyright (C) 2016-2020 Shengyu Zhang <i@silverrainz.me>
  *
  * This file is part of Srain.
  *
@@ -16,13 +16,20 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* Internal header file */
+#ifndef __SIRC_COMMAND_BUILDER_H
+#define __SIRC_COMMAND_BUILDER_H
 
-#ifndef __IN_PASSWORD_H
-#define __IN_PASSWORD_H
+#include "srain.h"
 
-#include "config/config.h"
+/**
+ * @brief A helper for building legal length IRC command.
+ */
+typedef struct _SircCommandBuilder SircCommandBuilder;
 
-void srn_config_manager_init_secret_schema(SrnConfigManager *mgr);
+SircCommandBuilder* sirc_command_builder_new(const char *cmd);
+void sirc_command_builder_free(SircCommandBuilder *self);
+bool sirc_command_builder_add_middle(SircCommandBuilder *self, const char *param);
+const char* sirc_command_builder_set_trailing(SircCommandBuilder *self, const char *param);
+char* sirc_command_builder_build(SircCommandBuilder *self);
 
-#endif /* __IN_PASSWORD_H */
+#endif /* __SIRC_COMMAND_BUILDER_H */
